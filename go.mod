@@ -1,4 +1,5 @@
-module labractl
+ module github.com/GoLabra/labractl
+
 
 go 1.24
 
