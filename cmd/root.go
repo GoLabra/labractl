@@ -1,9 +1,16 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/mod/semver"
 )
 
 // rootCmd represents the base command when called without any subcommands.
@@ -24,6 +31,7 @@ func Execute() {
 	if err != nil {
 		os.Exit(1)
 	}
+	checkLatestVersion()
 }
 
 func init() {
@@ -36,4 +44,52 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+// checkLatestVersion fetches the latest release tag from GitHub and compares
+// it against the current Version. If a newer version is available, it informs
+// the user on stderr. Network errors are silently ignored.
+func checkLatestVersion() {
+	if Version == "dev" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/repos/GoLabra/labractl/releases/latest", nil)
+	if err != nil {
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+
+	var r struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+		return
+	}
+	latest := strings.TrimSpace(r.TagName)
+	if latest == "" {
+		return
+	}
+
+	current := Version
+	if !strings.HasPrefix(current, "v") {
+		current = "v" + current
+	}
+	if !strings.HasPrefix(latest, "v") {
+		latest = "v" + latest
+	}
+
+	if semver.Compare(current, latest) < 0 {
+		fmt.Fprintf(os.Stderr, "A new version of labractl is available: %s\n", latest)
+	}
 }
