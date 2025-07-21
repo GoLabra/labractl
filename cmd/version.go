@@ -1,13 +1,13 @@
 package cmd
 
-// Version is the current version of labractl. It is overridden at build time using -ldflags.
-var Version = "dev"
 import (
 	"fmt"
-
 	"github.com/GoLabra/labractl/internal/cliutils"
 	"github.com/spf13/cobra"
 )
+
+// Version is the current version of labractl. It is overridden at build time using -ldflags.
+var Version = "dev"
 
 // version is set at build time using -ldflags.
 var version = "dev"

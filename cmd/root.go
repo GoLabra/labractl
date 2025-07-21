@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/GoLabra/labractl/internal/log"
+	"github.com/spf13/cobra"
+	"golang.org/x/mod/semver"
 	"net/http"
 	"os"
 	"strings"
-
-	"github.com/spf13/cobra"
-
-	"github.com/GoLabra/labractl/internal/log"
+	"time"
 )
 
 // rootCmd represents the base command when called without any subcommands.

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,8 +50,8 @@ var startCmd = &cobra.Command{
 		frontendPath := filepath.Join("src", "admin")
 		scripts := map[string]string{
 			"start":          "concurrently \"yarn start:backend\" \"yarn start:frontend\"",
-			"start:backend":  "cd src/app && go run main.go start",
-			"start:frontend": "cd src/admin && yarn dev",
+			"start:backend":  fmt.Sprintf("cd %s && go run main.go start", backendPath),
+			"start:frontend": fmt.Sprintf("cd %s && yarn dev", frontendPath),
 		}
 		modified := false
 		if pkg["scripts"] == nil {
