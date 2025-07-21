@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/GoLabra/labractl/internal/cliutils"
+	"github.com/GoLabra/labractl/internal/log"
 )
 
 // startCmd runs the LabraGo backend and frontend concurrently.
@@ -17,16 +17,16 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start both backend and frontend servers",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(cliutils.Emoji("🚦", "->"), "Preparing LabraGo start...")
+		log.Infof("🚦 Preparing LabraGo start...")
 
 		root := "."
 		packageJsonPath := filepath.Join(root, "package.json")
 
 		// 1. If no package.json, run `yarn init -y`
 		if _, err := os.Stat(packageJsonPath); err != nil {
-			fmt.Println(cliutils.Emoji("📦", "[pkg]"), "No package.json found. Initializing Yarn project...")
+			log.Infof("📦 No package.json found. Initializing Yarn project...")
 			if err := cliutils.RunCommand("yarn", []string{"init", "-y"}, root); err != nil {
-				fmt.Println(cliutils.Emoji("❌", "X"), "Failed to initialize Yarn project:", err)
+				log.Errorf("❌ Failed to initialize Yarn project: %v", err)
 				os.Exit(1)
 			}
 		}
@@ -34,13 +34,13 @@ var startCmd = &cobra.Command{
 		// 2. Read + parse package.json
 		data, err := os.ReadFile(packageJsonPath)
 		if err != nil {
-			fmt.Println(cliutils.Emoji("❌", "X"), "Failed to read package.json:", err)
+			log.Errorf("❌ Failed to read package.json: %v", err)
 			os.Exit(1)
 		}
 
 		var pkg map[string]interface{}
 		if err := json.Unmarshal(data, &pkg); err != nil {
-			fmt.Println(cliutils.Emoji("❌", "X"), "Failed to parse package.json:", err)
+			log.Errorf("❌ Failed to parse package.json: %v", err)
 			os.Exit(1)
 		}
 
@@ -49,8 +49,8 @@ var startCmd = &cobra.Command{
 		frontendPath := filepath.Join("src", "admin")
 		scripts := map[string]string{
 			"start":          "concurrently \"yarn start:backend\" \"yarn start:frontend\"",
-			"start:backend":  fmt.Sprintf("cd %s && go run main.go start", backendPath),
-			"start:frontend": fmt.Sprintf("cd %s && yarn dev", frontendPath),
+			"start:backend":  "cd src/app && go run main.go start",
+			"start:frontend": "cd src/admin && yarn dev",
 		}
 		modified := false
 		if pkg["scripts"] == nil {
@@ -67,29 +67,29 @@ var startCmd = &cobra.Command{
 		if modified {
 			newData, _ := json.MarshalIndent(pkg, "", "  ")
 			if err := os.WriteFile(packageJsonPath, newData, 0644); err != nil {
-				fmt.Println(cliutils.Emoji("❌", "X"), "Failed to update package.json:", err)
+				log.Errorf("❌ Failed to update package.json: %v", err)
 				os.Exit(1)
 			}
-			fmt.Println(cliutils.Emoji("🛠", "[update]"), "package.json updated with start scripts.")
+			log.Infof("🛠 package.json updated with start scripts.")
 		}
 
 		// 4. Check/install concurrently
 		if err := exec.Command("yarn", "list", "--pattern", "concurrently").Run(); err != nil {
-			fmt.Println(cliutils.Emoji("📦", "[pkg]"), "Installing concurrently...")
+			log.Infof("📦 Installing concurrently...")
 			if err := cliutils.RunCommand("yarn", []string{"add", "concurrently", "--dev"}, root); err != nil {
-				fmt.Println(cliutils.Emoji("❌", "X"), "Failed to install concurrently:", err)
+				log.Errorf("❌ Failed to install concurrently: %v", err)
 				os.Exit(1)
 			}
 		}
 
 		// 5. Run yarn start
-		fmt.Println(cliutils.Emoji("🚀", "->"), "Starting LabraGo backend + frontend")
+		log.Infof("🚀 Starting LabraGo backend + frontend")
 		run := exec.Command("yarn", "start")
 		run.Stdout = os.Stdout
 		run.Stderr = os.Stderr
 		run.Stdin = os.Stdin
 		if err := run.Run(); err != nil {
-			fmt.Println(cliutils.Emoji("❌", "X"), "Failed to run yarn start:", err)
+			log.Errorf("❌ Failed to run yarn start: %v", err)
 			os.Exit(1)
 		}
 	},
