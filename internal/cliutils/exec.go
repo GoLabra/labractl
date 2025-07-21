@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -12,7 +13,14 @@ import (
 // working directory. Stdout and stderr are attached to the current
 // process so output streams to the user.
 func RunCommand(bin string, args []string, dir string) error {
-	cmd := exec.Command(bin, args...)
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		// Use cmd.exe for better built-in command compatibility
+		all := append([]string{bin}, args...)
+		cmd = exec.Command("cmd", append([]string{"/C"}, all...)...)
+	} else {
+		cmd = exec.Command(bin, args...)
+	}
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

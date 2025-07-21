@@ -22,7 +22,7 @@ var createCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		projectName := args[0]
 		repoURL := "https://github.com/GoLabra/labra"
-		fmt.Println("🚀 Creating LabraGo project:", projectName)
+		fmt.Println(cliutils.Emoji("🚀", "->"), "Creating LabraGo project:", projectName)
 
 		// 1. Check prerequisites
 		checkPrerequisites()
@@ -32,24 +32,24 @@ var createCmd = &cobra.Command{
 
 		// 3. Clone repo
 		if err := cliutils.RunCommand("git", []string{"clone", repoURL, projectName}, ""); err != nil {
-			fmt.Println("❌ Git clone failed:", err)
+			fmt.Println(cliutils.Emoji("❌", "X"), "Git clone failed:", err)
 			os.Exit(1)
 		}
 
 		// 4. Patch go.mod
 		goModPath := filepath.Join(projectName, "src", "app", "go.mod")
 		if err := patchGoMod(goModPath); err != nil {
-			fmt.Println("❌ go.mod patch failed:", err)
+			fmt.Println(cliutils.Emoji("❌", "X"), "go.mod patch failed:", err)
 			os.Exit(1)
 		}
 
 		// 5. Create .env files
 		if err := createAppEnvFile(projectName); err != nil {
-			fmt.Println("❌ Backend .env failed:", err)
+			fmt.Println(cliutils.Emoji("❌", "X"), "Backend .env failed:", err)
 			os.Exit(1)
 		}
 		if err := createAdminEnvFile(projectName); err != nil {
-			fmt.Println("❌ Frontend .env failed:", err)
+			fmt.Println(cliutils.Emoji("❌", "X"), "Frontend .env failed:", err)
 			os.Exit(1)
 		}
 
@@ -57,7 +57,7 @@ var createCmd = &cobra.Command{
 		appPath := filepath.Join(projectName, "src", "app")
 		_ = cliutils.RunCommand("go", []string{"mod", "tidy"}, appPath)
 		if err := cliutils.RunCommand("go", []string{"generate", "./..."}, appPath); err != nil {
-			fmt.Println("⚠️ go generate failed, retrying...")
+			fmt.Println(cliutils.Emoji("⚠️", "!") + " go generate failed, retrying...")
 			_ = cliutils.RunCommand("go", []string{"mod", "tidy"}, appPath)
 			_ = cliutils.RunCommand("go", []string{"generate", "./..."}, appPath)
 		}
@@ -65,18 +65,18 @@ var createCmd = &cobra.Command{
 		// 7. Frontend install
 		adminPath := filepath.Join(projectName, "src", "admin")
 		if _, err := os.Stat(filepath.Join(adminPath, "package.json")); err == nil {
-			fmt.Printf("📦 Installing frontend dependencies with %s...\n", packageManager)
+			fmt.Printf("%s Installing frontend dependencies with %s...\n", cliutils.Emoji("📦", "[pkg]"), packageManager)
 			_ = cliutils.RunCommand(packageManager, []string{"install"}, adminPath)
 		}
 
 		// 8. Ensure PostgreSQL
 		if err := ensurePostgresUserAndDatabase(projectName); err != nil {
-			fmt.Println("⚠️ PostgreSQL setup failed:", err)
+			fmt.Println(cliutils.Emoji("⚠️", "!"), "PostgreSQL setup failed:", err)
 		}
 
 		// 9. Done
-		fmt.Println("✅ Project created at", projectName)
-		fmt.Printf("👉 cd %s\nlabractl start\n", projectName)
+		fmt.Println(cliutils.Emoji("✅", "OK"), "Project created at", projectName)
+		fmt.Printf("%s cd %s\nlabractl start\n", cliutils.Emoji("👉", "->"), projectName)
 	},
 }
 
@@ -133,7 +133,7 @@ NEXT_PUBLIC_GRAPHQL_ENTITY_PLAYGROUND_URL="http://localhost:4001/eplayground"`
 // ensurePostgresUserAndDatabase verifies that the postgres user and
 // database exist, creating them if necessary.
 func ensurePostgresUserAndDatabase(project string) error {
-	fmt.Println("🐘 Checking PostgreSQL...")
+	fmt.Println(cliutils.Emoji("🐘", "[postgres]"), "Checking PostgreSQL...")
 
 	if err := exec.Command("psql", "--version").Run(); err != nil {
 		return fmt.Errorf("psql not found. Install it:\n→ macOS: brew install postgresql\n→ Ubuntu: sudo apt install postgresql\n→ Windows: https://postgresql.org/download")
@@ -147,7 +147,7 @@ func ensurePostgresUserAndDatabase(project string) error {
 
 	output, err := checkCmd.CombinedOutput()
 	if err != nil {
-		fmt.Println("❌ Failed to connect to PostgreSQL or run query.")
+		fmt.Println(cliutils.Emoji("❌", "X"), "Failed to connect to PostgreSQL or run query.")
 		fmt.Println("Output:", string(output))
 		return fmt.Errorf("psql error: %w", err)
 	}
@@ -162,10 +162,10 @@ func ensurePostgresUserAndDatabase(project string) error {
 	createCmd := exec.Command("createdb", "-U", "postgres", project)
 	createCmd.Env = append(os.Environ(), "PGPASSWORD=postgres")
 	if err := createCmd.Run(); err != nil {
-		return fmt.Errorf("❌ failed to create database '%s': %w", project, err)
+		return fmt.Errorf(cliutils.Emoji("❌", "X")+" failed to create database '%s': %w", project, err)
 	}
 
-	fmt.Println("✅ PostgreSQL database created:", project)
+	fmt.Println(cliutils.Emoji("✅", "OK"), "PostgreSQL database created:", project)
 	return nil
 }
 
@@ -176,18 +176,18 @@ func checkPrerequisites() {
 
 	for _, tool := range requiredTools {
 		if exec.Command(tool, "--version").Run() != nil {
-			fmt.Printf("⚠️  %s is not detected. You may encounter issues if it's not available at runtime.\n", tool)
+			fmt.Printf("%s %s is not detected. You may encounter issues if it's not available at runtime.\n", cliutils.Emoji("⚠️", "!"), tool)
 			if !autoYes {
-				fmt.Print("👉 Do you want to attempt installing it now? (y/N): ")
+				fmt.Printf("%s Do you want to attempt installing it now? (y/N): ", cliutils.Emoji("👉", "->"))
 				answer := cliutils.ReadLine()
 				if strings.ToLower(answer) != "y" {
 					continue
 				}
 			}
 			if err := installTool(tool); err != nil {
-				fmt.Printf("⚠️  Failed to install %s: %v\n", tool, err)
+				fmt.Printf("%s Failed to install %s: %v\n", cliutils.Emoji("⚠️", "!"), tool, err)
 			} else {
-				fmt.Printf("✅ %s installed successfully\n", tool)
+				fmt.Printf("%s %s installed successfully\n", cliutils.Emoji("✅", "OK"), tool)
 			}
 		}
 	}
@@ -197,7 +197,7 @@ func checkPrerequisites() {
 // specific package managers.
 func installTool(tool string) error {
 	platform := runtime.GOOS
-	fmt.Printf("⬇️ Installing %s on %s...\n", tool, platform)
+	fmt.Printf("%s Installing %s on %s...\n", cliutils.Emoji("⬇️", "[get]"), tool, platform)
 
 	var cmd *exec.Cmd
 
@@ -244,7 +244,7 @@ func getInstallCommand(pkg, platform string) *exec.Cmd {
 // choosePackageManager prompts the user for their preferred
 // package manager, defaulting to yarn.
 func choosePackageManager() string {
-	fmt.Print("📦 Choose package manager (npm/yarn) [default: yarn]: ")
+	fmt.Printf("%s Choose package manager (npm/yarn) [default: yarn]: ", cliutils.Emoji("📦", "[pkg]"))
 	choice := cliutils.ReadLine()
 	choice = strings.ToLower(strings.TrimSpace(choice))
 
