@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/GoLabra/labractl/internal/cliutils"
+	"github.com/GoLabra/labractl/internal/log"
 )
 
 var autoYes bool
@@ -22,7 +23,7 @@ var createCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		projectName := args[0]
 		repoURL := "https://github.com/GoLabra/labra"
-		fmt.Println("🚀 Creating LabraGo project:", projectName)
+		log.Infof("🚀 Creating LabraGo project: %s", projectName)
 
 		// 1. Check prerequisites
 		checkPrerequisites()
@@ -32,24 +33,24 @@ var createCmd = &cobra.Command{
 
 		// 3. Clone repo
 		if err := cliutils.RunCommand("git", []string{"clone", repoURL, projectName}, ""); err != nil {
-			fmt.Println("❌ Git clone failed:", err)
+			log.Errorf("❌ Git clone failed: %v", err)
 			os.Exit(1)
 		}
 
 		// 4. Patch go.mod
 		goModPath := filepath.Join(projectName, "src", "app", "go.mod")
 		if err := patchGoMod(goModPath); err != nil {
-			fmt.Println("❌ go.mod patch failed:", err)
+			log.Errorf("❌ go.mod patch failed: %v", err)
 			os.Exit(1)
 		}
 
 		// 5. Create .env files
 		if err := createAppEnvFile(projectName); err != nil {
-			fmt.Println("❌ Backend .env failed:", err)
+			log.Errorf("❌ Backend .env failed: %v", err)
 			os.Exit(1)
 		}
 		if err := createAdminEnvFile(projectName); err != nil {
-			fmt.Println("❌ Frontend .env failed:", err)
+			log.Errorf("❌ Frontend .env failed: %v", err)
 			os.Exit(1)
 		}
 
@@ -57,7 +58,7 @@ var createCmd = &cobra.Command{
 		appPath := filepath.Join(projectName, "src", "app")
 		_ = cliutils.RunCommand("go", []string{"mod", "tidy"}, appPath)
 		if err := cliutils.RunCommand("go", []string{"generate", "./..."}, appPath); err != nil {
-			fmt.Println("⚠️ go generate failed, retrying...")
+			log.Warnf("⚠️ go generate failed, retrying...")
 			_ = cliutils.RunCommand("go", []string{"mod", "tidy"}, appPath)
 			_ = cliutils.RunCommand("go", []string{"generate", "./..."}, appPath)
 		}
@@ -65,18 +66,18 @@ var createCmd = &cobra.Command{
 		// 7. Frontend install
 		adminPath := filepath.Join(projectName, "src", "admin")
 		if _, err := os.Stat(filepath.Join(adminPath, "package.json")); err == nil {
-			fmt.Printf("📦 Installing frontend dependencies with %s...\n", packageManager)
+			log.Infof("📦 Installing frontend dependencies with %s...", packageManager)
 			_ = cliutils.RunCommand(packageManager, []string{"install"}, adminPath)
 		}
 
 		// 8. Ensure PostgreSQL
 		if err := ensurePostgresUserAndDatabase(projectName); err != nil {
-			fmt.Println("⚠️ PostgreSQL setup failed:", err)
+			log.Warnf("⚠️ PostgreSQL setup failed: %v", err)
 		}
 
 		// 9. Done
-		fmt.Println("✅ Project created at", projectName)
-		fmt.Printf("👉 cd %s\nlabractl start\n", projectName)
+		log.Infof("✅ Project created at %s", projectName)
+		log.Infof("👉 cd %s\nlabractl start", projectName)
 	},
 }
 
@@ -133,7 +134,7 @@ NEXT_PUBLIC_GRAPHQL_ENTITY_PLAYGROUND_URL="http://localhost:4001/eplayground"`
 // ensurePostgresUserAndDatabase verifies that the postgres user and
 // database exist, creating them if necessary.
 func ensurePostgresUserAndDatabase(project string) error {
-	fmt.Println("🐘 Checking PostgreSQL...")
+	log.Infof("🐘 Checking PostgreSQL...")
 
 	if err := exec.Command("psql", "--version").Run(); err != nil {
 		return fmt.Errorf("psql not found. Install it:\n→ macOS: brew install postgresql\n→ Ubuntu: sudo apt install postgresql\n→ Windows: https://postgresql.org/download")
@@ -147,14 +148,14 @@ func ensurePostgresUserAndDatabase(project string) error {
 
 	output, err := checkCmd.CombinedOutput()
 	if err != nil {
-		fmt.Println("❌ Failed to connect to PostgreSQL or run query.")
-		fmt.Println("Output:", string(output))
+		log.Errorf("❌ Failed to connect to PostgreSQL or run query.")
+		log.Debugf("Output: %s", string(output))
 		return fmt.Errorf("psql error: %w", err)
 	}
 
 	// Check if database already exists
 	if strings.Contains(string(output), "1") {
-		fmt.Println("✅ PostgreSQL DB exists:", project)
+		log.Infof("✅ PostgreSQL DB exists: %s", project)
 		return nil
 	}
 
@@ -165,7 +166,7 @@ func ensurePostgresUserAndDatabase(project string) error {
 		return fmt.Errorf("❌ failed to create database '%s': %w", project, err)
 	}
 
-	fmt.Println("✅ PostgreSQL database created:", project)
+	log.Infof("✅ PostgreSQL database created: %s", project)
 	return nil
 }
 
@@ -176,7 +177,7 @@ func checkPrerequisites() {
 
 	for _, tool := range requiredTools {
 		if exec.Command(tool, "--version").Run() != nil {
-			fmt.Printf("⚠️  %s is not detected. You may encounter issues if it's not available at runtime.\n", tool)
+			log.Warnf("⚠️  %s is not detected. You may encounter issues if it's not available at runtime.", tool)
 			if !autoYes {
 				fmt.Print("👉 Do you want to attempt installing it now? (y/N): ")
 				answer := cliutils.ReadLine()
@@ -185,9 +186,9 @@ func checkPrerequisites() {
 				}
 			}
 			if err := installTool(tool); err != nil {
-				fmt.Printf("⚠️  Failed to install %s: %v\n", tool, err)
+				log.Warnf("⚠️  Failed to install %s: %v", tool, err)
 			} else {
-				fmt.Printf("✅ %s installed successfully\n", tool)
+				log.Infof("✅ %s installed successfully", tool)
 			}
 		}
 	}
@@ -197,7 +198,7 @@ func checkPrerequisites() {
 // specific package managers.
 func installTool(tool string) error {
 	platform := runtime.GOOS
-	fmt.Printf("⬇️ Installing %s on %s...\n", tool, platform)
+	log.Infof("⬇️ Installing %s on %s...", tool, platform)
 
 	var cmd *exec.Cmd
 
