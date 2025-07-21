@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/GoLabra/labractl/internal/cliutils"
 )
 
 var autoYes bool
@@ -30,7 +31,7 @@ var createCmd = &cobra.Command{
 		packageManager := choosePackageManager()
 
 		// 3. Clone repo
-		if err := runCommand("git", []string{"clone", repoURL, projectName}, ""); err != nil {
+		if err := cliutils.RunCommand("git", []string{"clone", repoURL, projectName}, ""); err != nil {
 			fmt.Println("❌ Git clone failed:", err)
 			os.Exit(1)
 		}
@@ -54,18 +55,18 @@ var createCmd = &cobra.Command{
 
 		// 6. Go mod tidy + generate
 		appPath := filepath.Join(projectName, "src", "app")
-		_ = runCommand("go", []string{"mod", "tidy"}, appPath)
-		if err := runCommand("go", []string{"generate", "./..."}, appPath); err != nil {
+		_ = cliutils.RunCommand("go", []string{"mod", "tidy"}, appPath)
+		if err := cliutils.RunCommand("go", []string{"generate", "./..."}, appPath); err != nil {
 			fmt.Println("⚠️ go generate failed, retrying...")
-			_ = runCommand("go", []string{"mod", "tidy"}, appPath)
-			_ = runCommand("go", []string{"generate", "./..."}, appPath)
+			_ = cliutils.RunCommand("go", []string{"mod", "tidy"}, appPath)
+			_ = cliutils.RunCommand("go", []string{"generate", "./..."}, appPath)
 		}
 
 		// 7. Frontend install
 		adminPath := filepath.Join(projectName, "src", "admin")
 		if _, err := os.Stat(filepath.Join(adminPath, "package.json")); err == nil {
 			fmt.Printf("📦 Installing frontend dependencies with %s...\n", packageManager)
-			_ = runCommand(packageManager, []string{"install"}, adminPath)
+			_ = cliutils.RunCommand(packageManager, []string{"install"}, adminPath)
 		}
 
 		// 8. Ensure PostgreSQL
@@ -79,14 +80,8 @@ var createCmd = &cobra.Command{
 	},
 }
 
-func runCommand(bin string, args []string, dir string) error {
-	cmd := exec.Command(bin, args...)
-	cmd.Dir = dir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
+// patchGoMod updates the replace directive in go.mod to point
+// to the local LabraGo API for development purposes.
 func patchGoMod(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -96,6 +91,8 @@ func patchGoMod(path string) error {
 	return os.WriteFile(path, []byte(out), 0644)
 }
 
+// createAppEnvFile writes a default backend .env configuration
+// to the generated project so it can run out of the box.
 func createAppEnvFile(projectName string) error {
 	appPath := filepath.Join(projectName, "src", "app")
 	schemaPath, _ := filepath.Abs(filepath.Join(appPath, "ent", "schema"))
@@ -117,6 +114,8 @@ CENTRIFUGO_API_KEY=secretkey
 	return os.WriteFile(filepath.Join(appPath, ".env"), []byte(env), 0644)
 }
 
+// createAdminEnvFile writes the required environment variables for
+// the frontend admin app.
 func createAdminEnvFile(projectName string) error {
 	content := `NEXT_PUBLIC_BRAND_PRODUCT_NAME="Labra·GO"
 NEXT_PUBLIC_BRAND_COLOR="blue"
@@ -131,6 +130,8 @@ NEXT_PUBLIC_GRAPHQL_ENTITY_PLAYGROUND_URL="http://localhost:4001/eplayground"`
 	return os.WriteFile(path, []byte(content), 0644)
 }
 
+// ensurePostgresUserAndDatabase verifies that the postgres user and
+// database exist, creating them if necessary.
 func ensurePostgresUserAndDatabase(project string) error {
 	fmt.Println("🐘 Checking PostgreSQL...")
 
@@ -168,6 +169,8 @@ func ensurePostgresUserAndDatabase(project string) error {
 	return nil
 }
 
+// checkPrerequisites ensures required tools like git and go are
+// available and offers to install them when missing.
 func checkPrerequisites() {
 	requiredTools := []string{"git", "go", "node", "psql"}
 
@@ -176,7 +179,7 @@ func checkPrerequisites() {
 			fmt.Printf("⚠️  %s is not detected. You may encounter issues if it's not available at runtime.\n", tool)
 			if !autoYes {
 				fmt.Print("👉 Do you want to attempt installing it now? (y/N): ")
-				answer := readLine()
+				answer := cliutils.ReadLine()
 				if strings.ToLower(answer) != "y" {
 					continue
 				}
@@ -190,6 +193,8 @@ func checkPrerequisites() {
 	}
 }
 
+// installTool attempts to install a missing tool using platform
+// specific package managers.
 func installTool(tool string) error {
 	platform := runtime.GOOS
 	fmt.Printf("⬇️ Installing %s on %s...\n", tool, platform)
@@ -218,6 +223,8 @@ func installTool(tool string) error {
 	return cmd.Run()
 }
 
+// getInstallCommand returns the command used to install a given
+// package for the current platform.
 func getInstallCommand(pkg, platform string) *exec.Cmd {
 	switch platform {
 	case "darwin":
@@ -234,9 +241,11 @@ func getInstallCommand(pkg, platform string) *exec.Cmd {
 	}
 }
 
+// choosePackageManager prompts the user for their preferred
+// package manager, defaulting to yarn.
 func choosePackageManager() string {
 	fmt.Print("📦 Choose package manager (npm/yarn) [default: yarn]: ")
-	choice := readLine()
+	choice := cliutils.ReadLine()
 	choice = strings.ToLower(strings.TrimSpace(choice))
 
 	if choice == "npm" {
@@ -245,12 +254,7 @@ func choosePackageManager() string {
 	return "yarn"
 }
 
-func readLine() string {
-	reader := bufio.NewReader(os.Stdin)
-	line, _ := reader.ReadString('\n')
-	return strings.TrimSpace(line)
-}
-
+// init registers the create command with the root command.
 func init() {
 	createCmd.Flags().BoolVarP(&autoYes, "yes", "y", false, "Automatic yes to prompts")
 	rootCmd.AddCommand(createCmd)

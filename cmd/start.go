@@ -8,8 +8,11 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+
+	"github.com/GoLabra/labractl/internal/cliutils"
 )
 
+// startCmd runs the LabraGo backend and frontend concurrently.
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start both backend and frontend servers",
@@ -22,7 +25,7 @@ var startCmd = &cobra.Command{
 		// 1. If no package.json, run `yarn init -y`
 		if _, err := os.Stat(packageJsonPath); err != nil {
 			fmt.Println("📦 No package.json found. Initializing Yarn project...")
-			if err := runCommand("yarn", []string{"init", "-y"}, root); err != nil {
+			if err := cliutils.RunCommand("yarn", []string{"init", "-y"}, root); err != nil {
 				fmt.Println("❌ Failed to initialize Yarn project:", err)
 				os.Exit(1)
 			}
@@ -71,7 +74,7 @@ var startCmd = &cobra.Command{
 		// 4. Check/install concurrently
 		if err := exec.Command("yarn", "list", "--pattern", "concurrently").Run(); err != nil {
 			fmt.Println("📦 Installing concurrently...")
-			if err := runCommand("yarn", []string{"add", "concurrently", "--dev"}, root); err != nil {
+			if err := cliutils.RunCommand("yarn", []string{"add", "concurrently", "--dev"}, root); err != nil {
 				fmt.Println("❌ Failed to install concurrently:", err)
 				os.Exit(1)
 			}
@@ -90,6 +93,7 @@ var startCmd = &cobra.Command{
 	},
 }
 
+// init registers the start command with the root command.
 func init() {
 	rootCmd.AddCommand(startCmd)
 }
