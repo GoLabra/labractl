@@ -60,6 +60,8 @@ This will:
     - Backend: `cd src/app && go run main.go start`
     - Frontend: `cd src/admin && yarn dev`
 
+Verbose logs can be enabled with `--debug` or by setting `LABRA_DEBUG=1`.
+
 ---
 
 ## 🛠 Development
