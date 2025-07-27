@@ -173,8 +173,25 @@ func ensurePostgresUserAndDatabase(project string) error {
 // checkPrerequisites ensures required tools like git and go are
 // available and offers to install them when missing.
 func checkPrerequisites() {
-	requiredTools := []string{"git", "go", "node", "psql"}
+	requiredTools := []string{"git", "node", "psql"}
 
+	// Check Go separately with better detection
+	if !checkGoInstallation() {
+		log.Warnf("⚠️  Go is not detected or not working properly. You may encounter issues if it's not available at runtime.")
+		if !autoYes {
+			fmt.Printf("%s Do you want to attempt installing Go now? (y/N): ", cliutils.Emoji("👉", "->"))
+			answer := cliutils.ReadLine()
+			if strings.ToLower(answer) == "y" {
+				if err := installTool("go"); err != nil {
+					log.Warnf("⚠️  Failed to install Go: %v", err)
+				} else {
+					log.Infof("✅ Go installed successfully")
+				}
+			}
+		}
+	}
+
+	// Check other tools
 	for _, tool := range requiredTools {
 		if exec.Command(tool, "--version").Run() != nil {
 			log.Warnf("⚠️  %s is not detected. You may encounter issues if it's not available at runtime.", tool)
@@ -192,6 +209,50 @@ func checkPrerequisites() {
 			}
 		}
 	}
+}
+
+// checkGoInstallation verifies that Go is properly installed and working.
+// It checks if the go command exists, is executable, and can run go version.
+func checkGoInstallation() bool {
+	// First check if go command exists in PATH
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		log.Debugf("Go not found in PATH: %v", err)
+		return false
+	}
+
+	// Check if the file is executable
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(goPath)
+		if err != nil {
+			log.Debugf("Cannot stat go binary: %v", err)
+			return false
+		}
+		if info.Mode()&0111 == 0 {
+			log.Debugf("Go binary is not executable")
+			return false
+		}
+	}
+
+	// Test if go version works
+	cmd := exec.Command("go", "version")
+	output, err := cmd.Output()
+	if err != nil {
+		log.Debugf("go version command failed: %v", err)
+		return false
+	}
+
+	versionOutput := strings.TrimSpace(string(output))
+	log.Debugf("Go version output: %s", versionOutput)
+
+	// Verify it's actually a Go installation
+	if !strings.Contains(versionOutput, "go version") {
+		log.Debugf("go version output doesn't contain expected format")
+		return false
+	}
+
+	log.Infof("✅ Go detected: %s", versionOutput)
+	return true
 }
 
 // installTool attempts to install a missing tool using platform
