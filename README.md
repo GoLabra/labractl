@@ -1,86 +1,325 @@
 # LabraGo CLI (`labractl`)
 
-This is the official CLI tool for creating and running [LabraGo](https://github.com/GoLabra/labra) projects — a headless CMS built in Go.
+[![Go Version](https://img.shields.io/badge/Go-1.24%2B-blue.svg)](https://golang.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-v1.0.2-orange.svg)](https://github.com/GoLabra/labractl/releases)
 
----
+> **The official CLI tool for creating and running [LabraGo](https://github.com/GoLabra/labra) projects — a modern headless CMS built in Go.**
 
-## 🚀 Features
+LabraGo CLI (`labractl`) streamlines the development workflow for LabraGo projects by automating project setup, dependency management, and development server orchestration.
 
-- `labractl create <project>` — creates a new project by cloning the LabraGo repo
-- Automatically patches `go.mod` for local development
-- Generates `.env` files for backend (`src/app`) and frontend (`src/admin`)
-- Installs dependencies: Go, Yarn, and PostgreSQL setup
-- Ensures PostgreSQL user/database exist
-- `labractl start` — runs both backend and frontend concurrently
-- No configuration needed — it just works™
+## ✨ Features
 
----
+### 🚀 **Project Creation**
+- **One-command project setup**: `labractl create <project-name>`
+- **Automatic repository cloning** from the official LabraGo template
+- **Smart dependency detection** and installation prompts
+- **Environment configuration** with pre-configured `.env` files
+- **Database setup** with PostgreSQL user and database creation
 
-## 🧱 Requirements
+### 🔧 **Development Workflow**
+- **Concurrent server management**: Run backend and frontend simultaneously
+- **Package manager flexibility**: Support for both npm and yarn
+- **Automatic script generation**: Creates necessary start scripts
+- **Debug mode**: Comprehensive logging for troubleshooting
 
-- [Go](https://golang.org/doc/install)
-- [Yarn](https://yarnpkg.com/)
-- [PostgreSQL](https://www.postgresql.org/download/)  
-  Ensure `psql`, `createuser`, and `createdb` are available in your terminal (in PATH).
+### 🛡️ **Robust Tool Detection**
+- **Comprehensive Go detection**: Verifies installation, executability, and functionality
+- **Package manager detection**: Automatically detects npm/yarn availability
+- **Database tool validation**: Ensures PostgreSQL tools are properly installed
+- **Graceful error handling**: Clear warnings and installation guidance
 
----
+## 📋 Requirements
 
-## ⚙️ Usage
+### **Required Tools**
+- **[Go](https://golang.org/doc/install)** (1.24+) - Backend development
+- **[Node.js](https://nodejs.org/)** (18+) - Frontend development
+- **[PostgreSQL](https://www.postgresql.org/download/)** - Database
+- **[Git](https://git-scm.com/)** - Version control
 
-### 1. Create a new project
+### **Package Managers** (Choose One)
+- **[Yarn](https://yarnpkg.com/)** (Recommended)
+- **[npm](https://www.npmjs.com/)** (Alternative)
+
+### **System Requirements**
+- **macOS**: 10.15+ (with Homebrew recommended)
+- **Linux**: Ubuntu 18.04+ / CentOS 7+
+- **Windows**: Windows 10+ (with WSL recommended)
+
+## 🚀 Quick Start
+
+### **1. Install labractl**
 
 ```bash
-labractl create myproject
+# Using Go
+go install github.com/GoLabra/labractl@latest
+
+# Or build from source
+git clone https://github.com/GoLabra/labractl.git
+cd labractl
+go build -o labractl main.go
 ```
 
-This will:
-
-- Clone the LabraGo repo into `./myproject`
-- Patch `go.mod` to use the local API
-- Create `.env` files with correct defaults
-- Run `go mod tidy` and `go generate ./...`
-- Install frontend dependencies with Yarn
-- Ensure PostgreSQL user and DB are in place
-
----
-
-### 2. Start the project
+### **2. Create a new project**
 
 ```bash
-cd myproject
+labractl create my-awesome-project
+```
+
+This command will:
+- ✅ Clone the LabraGo repository
+- ✅ Configure development environment
+- ✅ Install all dependencies
+- ✅ Set up PostgreSQL database
+- ✅ Generate configuration files
+
+### **3. Start development servers**
+
+```bash
+cd my-awesome-project
 labractl start
 ```
 
-This will:
+This launches:
+- 🖥️ **Backend server** on `http://localhost:4001`
+- 🎨 **Frontend admin** on `http://localhost:3000`
+- 🔍 **GraphQL Playground** on `http://localhost:4001/playground`
 
-- Ensure `package.json` exists in root
-- Add start scripts if missing
-- Install `concurrently` if needed
-- Start both backend and frontend:
-    - Backend: `cd src/app && go run main.go start`
-    - Frontend: `cd src/admin && yarn dev`
+## 📖 Detailed Usage
 
-Verbose logs can be enabled with `--debug` or by setting `LABRA_DEBUG=1`.
-
----
-
-## 🛠 Development
-
-If you want to build or test the CLI locally:
+### **Project Creation**
 
 ```bash
-go build -o labractl main.go
-./labractl help
+# Basic project creation
+labractl create myproject
+
+# With automatic yes to prompts
+labractl create myproject --yes
+
+# With debug logging
+labractl create myproject --debug
 ```
 
----
+**What happens during creation:**
+1. **Repository cloning** from `https://github.com/GoLabra/labra`
+2. **Go module configuration** with local API replacement
+3. **Environment setup** with backend and frontend `.env` files
+4. **Dependency installation** using your preferred package manager
+5. **Database initialization** with PostgreSQL user and database
+6. **Code generation** with `go mod tidy` and `go generate`
+
+### **Development Server**
+
+```bash
+# Start both servers
+labractl start
+
+# With debug mode
+labractl start --debug
+```
+
+**Server configuration:**
+- **Backend**: Go server with GraphQL API
+- **Frontend**: Next.js admin interface
+- **Database**: PostgreSQL with automatic migrations
+- **Real-time**: WebSocket subscriptions enabled
+
+### **Available Commands**
+
+```bash
+labractl create <project-name>  # Create new project
+labractl start                  # Start development servers
+labractl version               # Show version information
+labractl help                  # Show help information
+```
+
+## 🔧 Configuration
+
+### **Environment Variables**
+
+```bash
+# Enable debug logging
+export LABRA_DEBUG=1
+
+# Or use flag
+labractl create myproject --debug
+```
+
+### **Package Manager Selection**
+
+The CLI will prompt you to choose between npm and yarn:
+
+```bash
+📦 Choose package manager (npm/yarn) [default: yarn]: yarn
+```
+
+### **Database Configuration**
+
+PostgreSQL is automatically configured with:
+- **Host**: `localhost`
+- **Port**: `5432`
+- **User**: `postgres`
+- **Password**: `postgres`
+- **Database**: `<project-name>`
+
+## 🛠️ Development
+
+### **Building from Source**
+
+```bash
+# Clone repository
+git clone https://github.com/GoLabra/labractl.git
+cd labractl
+
+# Install dependencies
+go mod tidy
+
+# Build binary
+go build -o labractl main.go
+
+# Test the build
+./labractl version
+```
+
+### **Running Tests**
+
+```bash
+# Run all tests
+go test ./...
+
+# Run with coverage
+go test -cover ./...
+```
+
+### **Local Development**
+
+```bash
+# Build and run
+go run main.go create test-project
+
+# With debug
+go run main.go create test-project --debug
+```
+
+## 🔍 Troubleshooting
+
+### **Common Issues**
+
+#### **Go Not Detected**
+```bash
+# Install Go
+# macOS
+brew install go
+
+# Ubuntu
+sudo apt install golang-go
+
+# Windows
+# Download from https://golang.org/dl/
+```
+
+#### **PostgreSQL Issues**
+```bash
+# macOS
+brew install postgresql
+brew services start postgresql
+
+# Ubuntu
+sudo apt install postgresql postgresql-contrib
+sudo systemctl start postgresql
+```
+
+#### **Package Manager Issues**
+```bash
+# Install Yarn
+npm install -g yarn
+
+# Or use npm
+labractl create myproject
+# Choose 'npm' when prompted
+```
+
+### **Debug Mode**
+
+Enable detailed logging to troubleshoot issues:
+
+```bash
+# Set environment variable
+export LABRA_DEBUG=1
+
+# Or use flag
+labractl create myproject --debug
+```
+
+### **Manual Database Setup**
+
+If automatic database setup fails:
+
+```bash
+# Create PostgreSQL user
+createuser -s postgres
+
+# Create database
+createdb -U postgres myproject
+```
 
 ## 🤝 Contributing
 
-PRs welcome. Open an issue or fork away if you want to improve the CLI.
+We welcome contributions! Here's how to get started:
+
+### **Development Setup**
+
+1. **Fork the repository**
+2. **Clone your fork**
+   ```bash
+   git clone https://github.com/your-username/labractl.git
+   cd labractl
+   ```
+3. **Create a feature branch**
+   ```bash
+   git checkout -b feature/amazing-feature
+   ```
+4. **Make your changes**
+5. **Test thoroughly**
+   ```bash
+   go test ./...
+   go build -o labractl main.go
+   ./labractl version
+   ```
+6. **Commit with conventional commits**
+   ```bash
+   git commit -m "feat: add amazing new feature"
+   ```
+7. **Push and create a Pull Request**
+
+### **Code Style**
+
+- Follow Go conventions and `gofmt`
+- Add tests for new features
+- Update documentation as needed
+- Use conventional commit messages
+
+### **Reporting Issues**
+
+When reporting issues, please include:
+- **Operating system** and version
+- **Go version** (`go version`)
+- **labractl version** (`labractl version`)
+- **Debug output** (`labractl create test --debug`)
+- **Steps to reproduce**
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built with [Cobra](https://github.com/spf13/cobra) for CLI framework
+- Inspired by modern development workflows
+- Community-driven development
 
 ---
 
-## License
+**Made with ❤️ by the GoLabra team**
 
-MIT © 2025 GoLabra
+For more information about LabraGo, visit [https://github.com/GoLabra/labra](https://github.com/GoLabra/labra)
