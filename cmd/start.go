@@ -1,15 +1,18 @@
 package cmd
 
 import (
-	"encoding/json"
+	"bufio"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/GoLabra/labractl/internal/cliutils"
 	"github.com/GoLabra/labractl/internal/log"
 )
 
@@ -20,78 +23,99 @@ var startCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Infof("🚦 Preparing LabraGo start...")
 
-		root := "."
-		packageJsonPath := filepath.Join(root, "package.json")
+		// Ensure Yarn uses node-modules linker and no PnP in this workspace
+		ensureYarnNodeModules(".")
 
-		// 1. If no package.json, run `yarn init -y`
-		if _, err := os.Stat(packageJsonPath); err != nil {
-			log.Infof("📦 No package.json found. Initializing Yarn project...")
-			if err := cliutils.RunCommand("yarn", []string{"init", "-y"}, root); err != nil {
-				log.Errorf("❌ Failed to initialize Yarn project: %v", err)
-				os.Exit(1)
+		// Start backend and frontend processes
+		backendCmd := exec.Command("go", "run", "main.go", "start")
+		backendCmd.Dir = filepath.Join("src", "app")
+		backendStdout, _ := backendCmd.StdoutPipe()
+		backendStderr, _ := backendCmd.StderrPipe()
+
+		frontendCmd := exec.Command("yarn", "dev")
+		frontendCmd.Dir = filepath.Join("src", "admin")
+		frontendStdout, _ := frontendCmd.StdoutPipe()
+		frontendStderr, _ := frontendCmd.StderrPipe()
+
+		stream := func(prefix string, r io.Reader) {
+			scanner := bufio.NewScanner(r)
+			for scanner.Scan() {
+				line := scanner.Text()
+				if strings.TrimSpace(line) == "" {
+					continue
+				}
+				fmt.Printf("[%s] %s\n", prefix, line)
 			}
 		}
 
-		// 2. Read + parse package.json
-		data, err := os.ReadFile(packageJsonPath)
-		if err != nil {
-			log.Errorf("❌ Failed to read package.json: %v", err)
+		if err := backendCmd.Start(); err != nil {
+			log.Errorf("❌ Failed to start backend: %v", err)
 			os.Exit(1)
 		}
+		go stream("backend", backendStdout)
+		go stream("backend", backendStderr)
 
-		var pkg map[string]interface{}
-		if err := json.Unmarshal(data, &pkg); err != nil {
-			log.Errorf("❌ Failed to parse package.json: %v", err)
+		if err := frontendCmd.Start(); err != nil {
+			log.Errorf("❌ Failed to start frontend: %v", err)
+			_ = backendCmd.Process.Kill()
 			os.Exit(1)
 		}
+		go stream("frontend", frontendStdout)
+		go stream("frontend", frontendStderr)
 
-		// 3. Add missing scripts
-		backendPath := filepath.Join("src", "app")
-		frontendPath := filepath.Join("src", "admin")
-		scripts := map[string]string{
-			"start":          "concurrently \"yarn start:backend\" \"yarn start:frontend\"",
-			"start:backend":  fmt.Sprintf("cd %s && go run main.go start", backendPath),
-			"start:frontend": fmt.Sprintf("cd %s && yarn dev", frontendPath),
-		}
-		modified := false
-		if pkg["scripts"] == nil {
-			pkg["scripts"] = map[string]interface{}{}
-			modified = true
-		}
-		s := pkg["scripts"].(map[string]interface{})
-		for k, v := range scripts {
-			if _, ok := s[k]; !ok {
-				s[k] = v
-				modified = true
-			}
-		}
-		if modified {
-			newData, _ := json.MarshalIndent(pkg, "", "  ")
-			if err := os.WriteFile(packageJsonPath, newData, 0644); err != nil {
-				log.Errorf("❌ Failed to update package.json: %v", err)
-				os.Exit(1)
-			}
-			log.Infof("🛠 package.json updated with start scripts.")
-		}
-
-		// 4. Check/install concurrently
-		if err := exec.Command("yarn", "list", "--pattern", "concurrently").Run(); err != nil {
-			log.Infof("📦 Installing concurrently...")
-			if err := cliutils.RunCommand("yarn", []string{"add", "concurrently", "--dev"}, root); err != nil {
-				log.Errorf("❌ Failed to install concurrently: %v", err)
-				os.Exit(1)
-			}
-		}
-
-		// 5. Run yarn start
 		log.Infof("🚀 Starting LabraGo backend + frontend")
-		run := exec.Command("yarn", "start")
-		run.Stdout = os.Stdout
-		run.Stderr = os.Stderr
-		run.Stdin = os.Stdin
-		if err := run.Run(); err != nil {
-			log.Errorf("❌ Failed to run yarn start: %v", err)
-			os.Exit(1)
+
+		// Readiness checks
+		type status struct {
+			name string
+			ok   bool
+			addr string
+		}
+		results := make(chan status, 2)
+		check := func(name, addr string) {
+			deadline := time.Now().Add(60 * time.Second)
+			for time.Now().Before(deadline) {
+				conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+				if err == nil {
+					_ = conn.Close()
+					results <- status{name: name, ok: true, addr: addr}
+					return
+				}
+				time.Sleep(1 * time.Second)
+			}
+			results <- status{name: name, ok: false, addr: addr}
+		}
+		go check("backend", "127.0.0.1:4001")
+		go check("frontend", "127.0.0.1:3000")
+
+		b := <-results
+		f := <-results
+		summarize := func(s status) string {
+			if s.ok {
+				return fmt.Sprintf("%s: started (%s)", s.name, s.addr)
+			}
+			return fmt.Sprintf("%s: not ready", s.name)
+		}
+		log.Infof("✅ Startup summary → %s | %s", summarize(b), summarize(f))
+
+		backendErrCh := make(chan error, 1)
+		frontendErrCh := make(chan error, 1)
+		go func() { backendErrCh <- backendCmd.Wait() }()
+		go func() { frontendErrCh <- frontendCmd.Wait() }()
+
+		select {
+		case err := <-backendErrCh:
+			if err != nil {
+				log.Errorf("❌ Backend exited: %v", err)
+			} else {
+				log.Infof("✅ Backend exited")
+			}
+		case err := <-frontendErrCh:
+			if err != nil {
+				log.Errorf("❌ Frontend exited: %v", err)
+			} else {
+				log.Infof("✅ Frontend exited")
+			}
 		}
 	},
 }
@@ -99,4 +123,15 @@ var startCmd = &cobra.Command{
 // init registers the start command with the root command.
 func init() {
 	rootCmd.AddCommand(startCmd)
+}
+
+// ensureYarnNodeModules makes sure Yarn uses the node-modules linker and disables PnP
+func ensureYarnNodeModules(root string) {
+	yrc := filepath.Join(root, ".yarnrc.yml")
+	// Only write if missing
+	if _, err := os.Stat(yrc); err != nil {
+		_ = os.WriteFile(yrc, []byte("nodeLinker: node-modules\n"), 0644)
+	}
+	// Remove PnP file if present
+	_ = os.Remove(filepath.Join(root, ".pnp.cjs"))
 }

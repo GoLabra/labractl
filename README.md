@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.24%2B-blue.svg)](https://golang.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-v1.0.2-orange.svg)](https://github.com/GoLabra/labractl/releases)
+[![Version](https://img.shields.io/badge/Version-v1.0.3-orange.svg)](https://github.com/GoLabra/labractl/releases)
 
 > **The official CLI tool for creating and running [LabraGo](https://github.com/GoLabra/labra) projects — a modern headless CMS built in Go.**
 
@@ -58,6 +58,18 @@ go install github.com/GoLabra/labractl@latest
 git clone https://github.com/GoLabra/labractl.git
 cd labractl
 go build -o labractl main.go
+```
+
+Add the Go bin directory to your PATH so `labractl` is recognized (macOS/Linux):
+
+```bash
+export PATH="$(go env GOPATH)/bin:$PATH"
+```
+
+For Windows (PowerShell):
+
+```powershell
+[Environment]::SetEnvironmentVariable("Path", ("$env:USERPROFILE\go\bin;" + $env:Path), "User")
 ```
 
 ### **2. Create a new project**
@@ -143,6 +155,18 @@ export LABRA_DEBUG=1
 
 # Or use flag
 labractl create myproject --debug
+```
+
+### **Selecting Labra Version/Branch**
+
+Use `--labra-ref` to choose a specific Labra tag or branch when creating a project:
+
+```bash
+# Use a release tag
+labractl create myproject --labra-ref v1.2.3
+
+# Or a branch name
+labractl create myproject --labra-ref feature/new-auth
 ```
 
 ### **Package Manager Selection**

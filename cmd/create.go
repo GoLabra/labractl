@@ -15,6 +15,7 @@ import (
 )
 
 var autoYes bool
+var labraRef string
 
 var createCmd = &cobra.Command{
 	Use:   "create [project-name]",
@@ -31,8 +32,13 @@ var createCmd = &cobra.Command{
 		// 2. Choose package manager
 		packageManager := choosePackageManager()
 
-		// 3. Clone repo
-		if err := cliutils.RunCommand("git", []string{"clone", repoURL, projectName}, ""); err != nil {
+		// 3. Clone repo (optionally at a specific ref)
+		cloneArgs := []string{"clone", repoURL, projectName}
+		if strings.TrimSpace(labraRef) != "" {
+			log.Infof("🌿 Using Labra ref: %s", labraRef)
+			cloneArgs = []string{"clone", "--branch", labraRef, "--single-branch", repoURL, projectName}
+		}
+		if err := cliutils.RunCommand("git", cloneArgs, ""); err != nil {
 			log.Errorf("❌ Git clone failed: %v", err)
 			os.Exit(1)
 		}
@@ -97,6 +103,8 @@ func patchGoMod(path string) error {
 func createAppEnvFile(projectName string) error {
 	appPath := filepath.Join(projectName, "src", "app")
 	schemaPath, _ := filepath.Abs(filepath.Join(appPath, "ent", "schema"))
+	filesPath, _ := filepath.Abs(filepath.Join(appPath, "files"))
+	_ = os.MkdirAll(filesPath, 0755)
 
 	env := fmt.Sprintf(`# LabraGo Environment
 
@@ -107,10 +115,12 @@ DSN=postgres://postgres:postgres@localhost:5432/%s?sslmode=disable
 DB_DIALECT=postgres
 
 ENT_SCHEMA_PATH=%s
+FILE_STORAGE_PATH=%s
+FILE_STORAGE_PROVIDER=local
 
 CENTRIFUGO_API_ADDRESS=http://localhost:8000
 CENTRIFUGO_API_KEY=secretkey
-`, projectName, schemaPath)
+`, projectName, schemaPath, filesPath)
 
 	return os.WriteFile(filepath.Join(appPath, ".env"), []byte(env), 0644)
 }
@@ -319,5 +329,6 @@ func choosePackageManager() string {
 // init registers the create command with the root command.
 func init() {
 	createCmd.Flags().BoolVarP(&autoYes, "yes", "y", false, "Automatic yes to prompts")
+	createCmd.Flags().StringVar(&labraRef, "labra-ref", "", "Labra tag or branch to use (e.g. v1.2.3 or feature/xyz)")
 	rootCmd.AddCommand(createCmd)
 }
