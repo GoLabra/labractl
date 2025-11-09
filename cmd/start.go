@@ -27,13 +27,13 @@ var startCmd = &cobra.Command{
 		ensureYarnNodeModules(".")
 
 		// Start backend and frontend processes
-		backendCmd := exec.Command("go", "run", "main.go", "start")
-		backendCmd.Dir = filepath.Join("src", "app")
+		backendCmd := exec.Command("go", "run", "main.go")
+		backendCmd.Dir = "." // Project root is now the app root
 		backendStdout, _ := backendCmd.StdoutPipe()
 		backendStderr, _ := backendCmd.StderrPipe()
 
 		frontendCmd := exec.Command("yarn", "dev")
-		frontendCmd.Dir = filepath.Join("src", "admin")
+		frontendCmd.Dir = filepath.Join("admin")
 		frontendStdout, _ := frontendCmd.StdoutPipe()
 		frontendStderr, _ := frontendCmd.StderrPipe()
 
@@ -85,7 +85,7 @@ var startCmd = &cobra.Command{
 			}
 			results <- status{name: name, ok: false, addr: addr}
 		}
-		go check("backend", "127.0.0.1:4001")
+		go check("backend", "127.0.0.1:4000")
 		go check("frontend", "127.0.0.1:3000")
 
 		b := <-results
