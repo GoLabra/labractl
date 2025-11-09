@@ -44,7 +44,7 @@ var createCmd = &cobra.Command{
 		}
 
 		// 4. Patch go.mod
-		goModPath := filepath.Join(projectName, "src", "app", "go.mod")
+		goModPath := filepath.Join(projectName, "resources", "app", "go.mod")
 		if err := patchGoMod(goModPath); err != nil {
 			log.Errorf("❌ go.mod patch failed: %v", err)
 			os.Exit(1)
@@ -61,7 +61,7 @@ var createCmd = &cobra.Command{
 		}
 
 		// 6. Go mod tidy + generate
-		appPath := filepath.Join(projectName, "src", "app")
+		appPath := filepath.Join(projectName, "resources", "app")
 		_ = cliutils.RunCommand("go", []string{"mod", "tidy"}, appPath)
 		if err := cliutils.RunCommand("go", []string{"generate", "./..."}, appPath); err != nil {
 			log.Warnf("⚠️ go generate failed, retrying...")
@@ -70,7 +70,7 @@ var createCmd = &cobra.Command{
 		}
 
 		// 7. Frontend install
-		adminPath := filepath.Join(projectName, "src", "admin")
+		adminPath := filepath.Join(projectName, "resources", "admin")
 		if _, err := os.Stat(filepath.Join(adminPath, "package.json")); err == nil {
 			log.Infof("📦 Installing frontend dependencies with %s...", packageManager)
 			_ = cliutils.RunCommand(packageManager, []string{"install"}, adminPath)
@@ -94,21 +94,21 @@ func patchGoMod(path string) error {
 	if err != nil {
 		return err
 	}
-	out := strings.Replace(string(data), "// REPLACE_LABRAGO_DEVELOPMENT_API", "replace github.com/GoLabra/labra/src/api => ../api", 1)
+	out := strings.Replace(string(data), "// REPLACE_LABRAGO_DEVELOPMENT_API", "replace github.com/GoLabra/labra => ../..", 1)
 	return os.WriteFile(path, []byte(out), 0644)
 }
 
 // createAppEnvFile writes a default backend .env configuration
 // to the generated project so it can run out of the box.
 func createAppEnvFile(projectName string) error {
-	appPath := filepath.Join(projectName, "src", "app")
+	appPath := filepath.Join(projectName, "resources", "app")
 	schemaPath, _ := filepath.Abs(filepath.Join(appPath, "ent", "schema"))
-	filesPath, _ := filepath.Abs(filepath.Join(appPath, "files"))
-	_ = os.MkdirAll(filesPath, 0755)
+	storagePath, _ := filepath.Abs(filepath.Join(appPath, "storage"))
+	_ = os.MkdirAll(storagePath, 0755)
 
 	env := fmt.Sprintf(`# LabraGo Environment
 
-SERVER_PORT=4001
+SERVER_PORT=4000
 SECRET_KEY=supersecretdevkey
 
 DSN=postgres://postgres:postgres@localhost:5432/%s?sslmode=disable
@@ -120,7 +120,7 @@ FILE_STORAGE_PROVIDER=local
 
 CENTRIFUGO_API_ADDRESS=http://localhost:8000
 CENTRIFUGO_API_KEY=secretkey
-`, projectName, schemaPath, filesPath)
+`, projectName, schemaPath, storagePath)
 
 	return os.WriteFile(filepath.Join(appPath, ".env"), []byte(env), 0644)
 }
@@ -130,14 +130,15 @@ CENTRIFUGO_API_KEY=secretkey
 func createAdminEnvFile(projectName string) error {
 	content := `NEXT_PUBLIC_BRAND_PRODUCT_NAME="Labra·GO"
 NEXT_PUBLIC_BRAND_COLOR="blue"
-NEXT_PUBLIC_GRAPHQL_API_URL="http://localhost:4001"
-NEXT_PUBLIC_GRAPHQL_QUERY_API_URL="http://localhost:4001/query"
-NEXT_PUBLIC_GRAPHQL_QUERY_SUBSCRIPTION_URL="ws://localhost:4001/query"
-NEXT_PUBLIC_GRAPHQL_QUERY_PLAYGROUND_URL="http://localhost:4001/playground"
-NEXT_PUBLIC_GRAPHQL_ENTITY_API_URL="http://localhost:4001/entity"
-NEXT_PUBLIC_GRAPHQL_ENTITY_PLAYGROUND_URL="http://localhost:4001/eplayground"`
+NEXT_PUBLIC_GRAPHQL_API_URL="http://localhost:4000"
+NEXT_PUBLIC_GRAPHQL_QUERY_API_URL="http://localhost:4000/query"
+NEXT_PUBLIC_GRAPHQL_QUERY_SUBSCRIPTION_URL="ws://localhost:4000/query"
+NEXT_PUBLIC_GRAPHQL_QUERY_PLAYGROUND_URL="http://localhost:4000/playground"
+NEXT_PUBLIC_GRAPHQL_ADMIN_API_URL="http://localhost:4000/admin/query"
+NEXT_PUBLIC_GRAPHQL_ADMIN_PLAYGROUND_URL="http://localhost:4000/admin/playground"
+NEXT_PUBLIC_CENTRIFUGO_URL="ws://localhost:8000/connection/websocket"`
 
-	path := filepath.Join(projectName, "src", "admin", ".env")
+	path := filepath.Join(projectName, "resources", "admin", ".env.local")
 	return os.WriteFile(path, []byte(content), 0644)
 }
 

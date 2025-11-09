@@ -93,9 +93,9 @@ labractl start
 ```
 
 This launches:
-- 🖥️ **Backend server** on `http://localhost:4001`
+- 🖥️ **Backend server** on `http://localhost:4000`
 - 🎨 **Frontend admin** on `http://localhost:3000`
-- 🔍 **GraphQL Playground** on `http://localhost:4001/playground`
+- 🔍 **GraphQL Playground** on `http://localhost:4000/playground`
 
 ## 📖 Detailed Usage
 
@@ -115,7 +115,7 @@ labractl create myproject --debug
 **What happens during creation:**
 1. **Repository cloning** from `https://github.com/GoLabra/labra`
 2. **Go module configuration** with local API replacement
-3. **Environment setup** with backend and frontend `.env` files
+3. **Environment setup** with backend `.env` and frontend `.env.local` files
 4. **Dependency installation** using your preferred package manager
 5. **Database initialization** with PostgreSQL user and database
 6. **Code generation** with `go mod tidy` and `go generate`
