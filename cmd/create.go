@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,25 +33,82 @@ var createCmd = &cobra.Command{
 		// 2. Choose package manager
 		packageManager := choosePackageManager()
 
-		// 3. Clone repo (optionally at a specific ref)
-		cloneArgs := []string{"clone", repoURL, projectName}
-		if strings.TrimSpace(labraRef) != "" {
-			log.Infof("🌿 Using Labra ref: %s", labraRef)
-			cloneArgs = []string{"clone", "--branch", labraRef, "--single-branch", repoURL, projectName}
-		}
-		if err := cliutils.RunCommand("git", cloneArgs, ""); err != nil {
-			log.Errorf("❌ Git clone failed: %v", err)
+		// 3. Create project directory
+		if err := os.MkdirAll(projectName, 0755); err != nil {
+			log.Errorf("❌ Failed to create project directory: %v", err)
 			os.Exit(1)
 		}
 
-		// 4. Patch go.mod
-		goModPath := filepath.Join(projectName, "resources", "app", "go.mod")
-		if err := patchGoMod(goModPath); err != nil {
+		// 4. Clone repo to cache location (persistent for go.mod replace)
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			log.Errorf("❌ Failed to get home directory: %v", err)
+			os.Exit(1)
+		}
+		cacheDir := filepath.Join(homeDir, ".cache", "labractl")
+		if err := os.MkdirAll(cacheDir, 0755); err != nil {
+			log.Errorf("❌ Failed to create cache directory: %v", err)
+			os.Exit(1)
+		}
+
+		// Use ref in cache directory name to support multiple versions
+		cacheRepoName := "labra"
+		if strings.TrimSpace(labraRef) != "" {
+			// Sanitize ref name for filesystem
+			sanitizedRef := strings.ReplaceAll(strings.ReplaceAll(labraRef, "/", "-"), "\\", "-")
+			cacheRepoName = fmt.Sprintf("labra-%s", sanitizedRef)
+			log.Infof("🌿 Using Labra ref: %s", labraRef)
+		}
+		cacheRepoPath := filepath.Join(cacheDir, cacheRepoName)
+
+		// Clone if not already cached, or update if ref changed
+		if _, err := os.Stat(cacheRepoPath); os.IsNotExist(err) {
+			cloneArgs := []string{"clone", repoURL, cacheRepoPath}
+			if strings.TrimSpace(labraRef) != "" {
+				cloneArgs = []string{"clone", "--branch", labraRef, "--single-branch", repoURL, cacheRepoPath}
+			}
+			if err := cliutils.RunCommand("git", cloneArgs, ""); err != nil {
+				log.Errorf("❌ Git clone failed: %v", err)
+				os.Exit(1)
+			}
+		} else if strings.TrimSpace(labraRef) != "" {
+			// Update existing clone if ref specified
+			if err := cliutils.RunCommand("git", []string{"fetch", "origin", labraRef}, cacheRepoPath); err == nil {
+				_ = cliutils.RunCommand("git", []string{"checkout", labraRef}, cacheRepoPath)
+			}
+		}
+
+		// 5. Copy resources/app/* to project root
+		appSource := filepath.Join(cacheRepoPath, "resources", "app")
+		if err := copyDirectory(appSource, projectName); err != nil {
+			log.Errorf("❌ Failed to copy app template: %v", err)
+			os.Exit(1)
+		}
+
+		// 6. Copy resources/admin/* to projectName/admin/
+		adminSource := filepath.Join(cacheRepoPath, "resources", "admin")
+		adminDest := filepath.Join(projectName, "admin")
+		if _, err := os.Stat(adminSource); err == nil {
+			if err := copyDirectory(adminSource, adminDest); err != nil {
+				log.Warnf("⚠️ Failed to copy admin template: %v", err)
+			}
+		}
+
+		// 7. Get absolute path to labra repo for go.mod replace
+		labraRepoPath, err := filepath.Abs(cacheRepoPath)
+		if err != nil {
+			log.Errorf("❌ Failed to get absolute path: %v", err)
+			os.Exit(1)
+		}
+
+		// 8. Patch go.mod
+		goModPath := filepath.Join(projectName, "go.mod")
+		if err := patchGoMod(goModPath, labraRepoPath); err != nil {
 			log.Errorf("❌ go.mod patch failed: %v", err)
 			os.Exit(1)
 		}
 
-		// 5. Create .env files
+		// 9. Create .env files
 		if err := createAppEnvFile(projectName); err != nil {
 			log.Errorf("❌ Backend .env failed: %v", err)
 			os.Exit(1)
@@ -60,50 +118,110 @@ var createCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// 6. Go mod tidy + generate
-		appPath := filepath.Join(projectName, "resources", "app")
-		_ = cliutils.RunCommand("go", []string{"mod", "tidy"}, appPath)
-		if err := cliutils.RunCommand("go", []string{"generate", "./..."}, appPath); err != nil {
+		// 10. Go mod tidy + generate
+		_ = cliutils.RunCommand("go", []string{"mod", "tidy"}, projectName)
+		if err := cliutils.RunCommand("go", []string{"generate", "./..."}, projectName); err != nil {
 			log.Warnf("⚠️ go generate failed, retrying...")
-			_ = cliutils.RunCommand("go", []string{"mod", "tidy"}, appPath)
-			_ = cliutils.RunCommand("go", []string{"generate", "./..."}, appPath)
+			_ = cliutils.RunCommand("go", []string{"mod", "tidy"}, projectName)
+			_ = cliutils.RunCommand("go", []string{"generate", "./..."}, projectName)
 		}
 
-		// 7. Frontend install
-		adminPath := filepath.Join(projectName, "resources", "admin")
+		// 11. Frontend install
+		adminPath := filepath.Join(projectName, "admin")
 		if _, err := os.Stat(filepath.Join(adminPath, "package.json")); err == nil {
 			log.Infof("📦 Installing frontend dependencies with %s...", packageManager)
 			_ = cliutils.RunCommand(packageManager, []string{"install"}, adminPath)
 		}
 
-		// 8. Ensure PostgreSQL
+		// 12. Ensure PostgreSQL
 		if err := ensurePostgresUserAndDatabase(projectName); err != nil {
 			log.Warnf("⚠️ PostgreSQL setup failed: %v", err)
 		}
 
-		// 9. Done
+		// 13. Done
 		log.Infof("✅ Project created at %s", projectName)
 		log.Infof("👉 cd %s\nlabractl start", projectName)
 	},
 }
 
+// copyDirectory recursively copies a directory from source to destination.
+func copyDirectory(src, dst string) error {
+	// Create destination directory
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
+	}
+
+	// Read source directory
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return fmt.Errorf("failed to read source directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			// Recursively copy subdirectories
+			if err := copyDirectory(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			// Copy file
+			if err := copyFile(srcPath, dstPath); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// copyFile copies a single file from source to destination.
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	if err != nil {
+		return fmt.Errorf("failed to copy file: %w", err)
+	}
+
+	// Preserve file permissions
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("failed to stat source file: %w", err)
+	}
+	return os.Chmod(dst, srcInfo.Mode())
+}
+
 // patchGoMod updates the replace directive in go.mod to point
-// to the local LabraGo API for development purposes.
-func patchGoMod(path string) error {
+// to the local LabraGo repository for development purposes.
+func patchGoMod(path string, labraRepoPath string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	out := strings.Replace(string(data), "// REPLACE_LABRAGO_DEVELOPMENT_API", "replace github.com/GoLabra/labra => ../..", 1)
+	replaceDirective := fmt.Sprintf("replace github.com/GoLabra/labra => %s", labraRepoPath)
+	out := strings.Replace(string(data), "// REPLACE_LABRAGO_DEVELOPMENT_API", replaceDirective, 1)
 	return os.WriteFile(path, []byte(out), 0644)
 }
 
 // createAppEnvFile writes a default backend .env configuration
 // to the generated project so it can run out of the box.
 func createAppEnvFile(projectName string) error {
-	appPath := filepath.Join(projectName, "resources", "app")
-	schemaPath, _ := filepath.Abs(filepath.Join(appPath, "ent", "schema"))
-	storagePath, _ := filepath.Abs(filepath.Join(appPath, "storage"))
+	projectPath, _ := filepath.Abs(projectName)
+	schemaPath, _ := filepath.Abs(filepath.Join(projectPath, "ent", "schema"))
+	storagePath, _ := filepath.Abs(filepath.Join(projectPath, "storage"))
 	_ = os.MkdirAll(storagePath, 0755)
 
 	env := fmt.Sprintf(`# LabraGo Environment
@@ -122,7 +240,7 @@ CENTRIFUGO_API_ADDRESS=http://localhost:8000
 CENTRIFUGO_API_KEY=secretkey
 `, projectName, schemaPath, storagePath)
 
-	return os.WriteFile(filepath.Join(appPath, ".env"), []byte(env), 0644)
+	return os.WriteFile(filepath.Join(projectPath, ".env"), []byte(env), 0644)
 }
 
 // createAdminEnvFile writes the required environment variables for
@@ -138,7 +256,7 @@ NEXT_PUBLIC_GRAPHQL_ADMIN_API_URL="http://localhost:4000/admin/query"
 NEXT_PUBLIC_GRAPHQL_ADMIN_PLAYGROUND_URL="http://localhost:4000/admin/playground"
 NEXT_PUBLIC_CENTRIFUGO_URL="ws://localhost:8000/connection/websocket"`
 
-	path := filepath.Join(projectName, "resources", "admin", ".env.local")
+	path := filepath.Join(projectName, "admin", ".env.local")
 	return os.WriteFile(path, []byte(content), 0644)
 }
 

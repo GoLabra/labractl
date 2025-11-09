@@ -28,12 +28,12 @@ var startCmd = &cobra.Command{
 
 		// Start backend and frontend processes
 		backendCmd := exec.Command("go", "run", "main.go")
-		backendCmd.Dir = filepath.Join("resources", "app")
+		backendCmd.Dir = "." // Project root is now the app root
 		backendStdout, _ := backendCmd.StdoutPipe()
 		backendStderr, _ := backendCmd.StderrPipe()
 
 		frontendCmd := exec.Command("yarn", "dev")
-		frontendCmd.Dir = filepath.Join("resources", "admin")
+		frontendCmd.Dir = filepath.Join("admin")
 		frontendStdout, _ := frontendCmd.StdoutPipe()
 		frontendStderr, _ := frontendCmd.StderrPipe()
 

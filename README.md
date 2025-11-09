@@ -113,12 +113,14 @@ labractl create myproject --debug
 ```
 
 **What happens during creation:**
-1. **Repository cloning** from `https://github.com/GoLabra/labra`
-2. **Go module configuration** with local API replacement
-3. **Environment setup** with backend `.env` and frontend `.env.local` files
-4. **Dependency installation** using your preferred package manager
-5. **Database initialization** with PostgreSQL user and database
-6. **Code generation** with `go mod tidy` and `go generate`
+1. **Repository cloning** from `https://github.com/GoLabra/labra` to cache directory
+2. **Template copying** - Only `resources/app/*` contents are copied to project root
+3. **Admin setup** - `resources/admin/*` contents are copied to `admin/` subdirectory
+4. **Go module configuration** with local API replacement pointing to cached labra repo
+5. **Environment setup** with backend `.env` and frontend `.env.local` files
+6. **Dependency installation** using your preferred package manager
+7. **Database initialization** with PostgreSQL user and database
+8. **Code generation** with `go mod tidy` and `go generate`
 
 ### **Development Server**
 
